@@ -20,5 +20,5 @@ jobs:
       - name: Auto-merge PR
         uses: pascalgn/automerge-action@v0.14.0
         with:
-          github_token: ${{ secrets.ACCESS_GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           merge_method: squash # or 'merge' or 'rebase', depending on your preference
