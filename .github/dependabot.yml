@@ -1,6 +1,6 @@
 version: 2
 updates:
-  - package-ecosystem: "pip" # Use pip to manage Python packages
-    directory: "/" # Location of your requirements.txt file (root of the repo in this case)
+  - package-ecosystem: "pip"
+    directory: "/"
     schedule:
       interval: "daily"
