@@ -2,12 +2,7 @@ name: Auto Merge Dependabot PRs
 on:
   pull_request:
     types: [opened, synchronize]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: 'Pull Request number to merge'
-        required: true
-        type: string
+  workflow_dispatch:  # Allows manual triggering without inputs
 
 permissions:
   pull-requests: write
@@ -20,34 +15,50 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Get PR details
-        id: pr_details
+      - name: Get Dependabot PRs
+        id: dependabot_prs
         uses: actions/github-script@v6
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            let pr;
-            if (context.eventName === 'workflow_dispatch') {
-              pr = await github.rest.pulls.get({
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'desc'
+            });
+            const dependabotPRs = prs.data.filter(pr => 
+              pr.user.login === 'dependabot[bot]' && 
+              pr.title.startsWith('Bump ')
+            );
+            console.log(`Found ${dependabotPRs.length} open Dependabot PRs`);
+            return dependabotPRs;
+
+      - name: Process Dependabot PRs
+        if: steps.dependabot_prs.outputs.result != '[]'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const prs = JSON.parse('${{ steps.dependabot_prs.outputs.result }}');
+            for (const pr of prs) {
+              console.log(`Processing PR #${pr.number}: ${pr.title}`);
+              await github.rest.pulls.createReview({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: ${{ inputs.pr_number }}
+                pull_number: pr.number,
+                event: 'APPROVE'
               });
-            } else {
-              pr = context.payload.pull_request;
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                merge_method: 'squash'
+              });
+              console.log(`Merged PR #${pr.number}`);
             }
-            core.setOutput('title', pr.data.title);
-            core.setOutput('number', pr.data.number);
 
-      - name: Auto-merge PR
-        if: startsWith(steps.pr_details.outputs.title, 'Bump')
-        uses: pascalgn/automerge-action@v0.15.6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_LABELS: "dependencies"
-          MERGE_METHOD: "squash"
-          MERGE_COMMIT_MESSAGE: "pull-request-title"
-          MERGE_FORKS: "false"
-          MERGE_RETRIES: "6"
-          MERGE_RETRY_SLEEP: "10000"
-          MERGE_DELETE_BRANCH: "true"
+      - name: No Dependabot PRs found
+        if: steps.dependabot_prs.outputs.result == '[]'
+        run: echo "No open Dependabot PRs found to merge."
