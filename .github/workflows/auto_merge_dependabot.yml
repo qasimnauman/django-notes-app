@@ -2,7 +2,7 @@ name: Auto Merge Dependabot PRs
 
 on:
   schedule:
-    - cron: '*/450 * * * *'  # Runs every 450 minutes
+    - cron: '*/420 * * * *'  # Runs every 450 minutes
   workflow_dispatch:  # Allows manual triggering
 
 permissions:
