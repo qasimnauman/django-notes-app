@@ -1,9 +1,14 @@
+# File: .github/workflows/auto_merge_dependabot.yml
+
 name: Auto Merge Dependabot PRs
+
 on:
   workflow_dispatch:  # Allows manual triggering
+
 permissions:
   pull-requests: write
   contents: write
+
 jobs:
   auto-merge-dependabot:
     runs-on: ubuntu-latest
@@ -21,32 +26,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install PyGithub
 
-      - name: Get and process Dependabot PRs
+      - name: Run Dependabot PR merge script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          import os
-          from github import Github
-
-          def process_pr(pr):
-              print(f"Processing PR #{pr.number}: {pr.title}")
-              try:
-                  pr.create_review(event="APPROVE")
-                  print(f"Approved PR #{pr.number}")
-                  pr.merge(merge_method="squash")
-                  print(f"Merged PR #{pr.number}")
-              except Exception as e:
-                  print(f"Error processing PR #{pr.number}: {str(e)}")
-
-          g = Github(os.environ['GITHUB_TOKEN'])
-          repo = g.get_repo(os.environ['GITHUB_REPOSITORY'])
-
-          dependabot_prs = [pr for pr in repo.get_pulls(state='open') 
-                            if pr.user.login == 'dependabot[bot]' and pr.title.startswith('Bump ')]
-
-          if not dependabot_prs:
-              print("No open Dependabot PRs found to merge.")
-          else:
-              for pr in dependabot_prs:
-                  process_pr(pr)
-        shell: python
+        run: python .github/scripts/merge_dependabot_prs.py
