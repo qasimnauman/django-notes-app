@@ -1,14 +1,9 @@
 name: Auto Merge Dependabot PRs
-
 on:
-  # schedule:
-  #   - cron: '*/420 * * * *'  # Runs every 450 minutes
   workflow_dispatch:  # Allows manual triggering
-
 permissions:
   pull-requests: write
   contents: write
-
 jobs:
   auto-merge-dependabot:
     runs-on: ubuntu-latest
@@ -16,66 +11,42 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Get and process Dependabot PRs
-        uses: actions/github-script@v6
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            const script = async () => {
-              let page = 1;
-              let dependabotPRs = [];
-              
-              while (true) {
-                const { data: prs } = await github.rest.pulls.list({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  state: 'open',
-                  sort: 'updated',
-                  direction: 'desc',
-                  per_page: 100,
-                  page: page
-                });
-                
-                if (prs.length === 0) break;
-                
-                const filteredPRs = prs.filter(pr => 
-                  pr.user.login === 'dependabot[bot]' && 
-                  pr.title.startsWith('Bump ')
-                );
-                dependabotPRs = dependabotPRs.concat(filteredPRs);
-                
-                if (prs.length < 100) break;
-                page++;
-              }
-              
-              console.log(`Found ${dependabotPRs.length} open Dependabot PRs`);
-              
-              for (const pr of dependabotPRs) {
-                console.log(`Processing PR #${pr.number}: ${pr.title}`);
-                try {
-                  await github.rest.pulls.createReview({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: pr.number,
-                    event: 'APPROVE'
-                  });
-                  console.log(`Approved PR #${pr.number}`);
-                  
-                  await github.rest.pulls.merge({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: pr.number,
-                    merge_method: 'squash'
-                  });
-                  console.log(`Merged PR #${pr.number}`);
-                } catch (error) {
-                  console.error(`Error processing PR #${pr.number}:`, error.message);
-                }
-              }
-              
-              if (dependabotPRs.length === 0) {
-                console.log("No open Dependabot PRs found to merge.");
-              }
-            };
-            
-            await script();
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyGithub
+
+      - name: Get and process Dependabot PRs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          import os
+          from github import Github
+
+          def process_pr(pr):
+              print(f"Processing PR #{pr.number}: {pr.title}")
+              try:
+                  pr.create_review(event="APPROVE")
+                  print(f"Approved PR #{pr.number}")
+                  pr.merge(merge_method="squash")
+                  print(f"Merged PR #{pr.number}")
+              except Exception as e:
+                  print(f"Error processing PR #{pr.number}: {str(e)}")
+
+          g = Github(os.environ['GITHUB_TOKEN'])
+          repo = g.get_repo(os.environ['GITHUB_REPOSITORY'])
+
+          dependabot_prs = [pr for pr in repo.get_pulls(state='open') 
+                            if pr.user.login == 'dependabot[bot]' and pr.title.startswith('Bump ')]
+
+          if not dependabot_prs:
+              print("No open Dependabot PRs found to merge.")
+          else:
+              for pr in dependabot_prs:
+                  process_pr(pr)
+        shell: python
